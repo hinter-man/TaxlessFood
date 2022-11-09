@@ -1,0 +1,102 @@
+﻿@page "/"
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+<style>
+
+    #qr-code-reader {
+        width: 100vw;
+        height: 100vh;
+        object-fit: cover;
+        position: fixed;
+        top: 0;
+        left: 0;
+        z-index: -1;
+    }
+
+    .bottom-menu {
+        position: fixed;
+        bottom: 20px;
+        width: 100%;
+        display: flex;
+        justify-content: center;
+        gap: 10px;
+    }
+</style>
+
+<div class="bottom-menu">
+    <button @onclick="@(() => StartScan())">START</button>
+    <button @onclick="@(() => StopScan())">STOP</button>
+    @if (hasFlashLight)
+    {
+        <button @onclick="@(() => ToggleFlash())">ToggleFlashLight</button>
+    }
+</div>
+
+<video id="qr-code-reader"></video>
+
+@code {
+    private IJSObjectReference? module;
+    private IJSObjectReference? scannerInstance;
+    private DotNetObjectReference<QrCode>? dotNetHelper;
+
+    private string? qrCode;
+    private bool hasFlashLight;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            dotNetHelper = DotNetObjectReference.Create(this);
+            module = await JS.InvokeAsync<IJSObjectReference>("import",
+                "./js/qr-code-reader.js");
+            scannerInstance = await module.InvokeAsync<IJSObjectReference>("createScanner", dotNetHelper);
+
+            await StartScan();
+
+            hasFlashLight = await HasFlashlight() ?? false;
+        }
+    }
+
+    private ValueTask StartScan()
+    {
+        return module is not null ? module.InvokeVoidAsync("startScan", scannerInstance) : ValueTask.CompletedTask;
+    }
+
+    private ValueTask StopScan()
+    {
+        return module is not null ? module.InvokeVoidAsync("stopScan", scannerInstance) : ValueTask.CompletedTask;
+    }
+
+    private ValueTask ToggleFlash()
+    {
+        return module is not null ? module.InvokeVoidAsync("toggleFlashlight", scannerInstance) : ValueTask.CompletedTask;
+    }
+
+    private async ValueTask<bool?> HasFlashlight()
+    {
+        return module is not null ? await module.InvokeAsync<bool>("hasFlashlight", scannerInstance) : null;
+    }
+
+    [JSInvokable]
+    public async Task GetResult(string result)
+    {
+        qrCode = result;
+        await StopScan();
+        StateHasChanged();
+
+        if (module is not null)
+        {
+            await module.InvokeVoidAsync("alert", result);
+        }
+    }
+
+    async ValueTask IAsyncDisposable.DisposeAsync()
+    {
+        if (module is not null)
+        {
+            await module.InvokeVoidAsync("destroyScanner", scannerInstance);
+            await module.DisposeAsync();
+        }
+    }
+}

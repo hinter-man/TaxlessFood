@@ -2,6 +2,10 @@ h1:focus {
     outline: none;
 }
 
+.scan-region-highlight-svg {
+    stroke: white !important;
+}
+
 #blazor-error-ui {
     background: lightyellow;
     bottom: 0;
